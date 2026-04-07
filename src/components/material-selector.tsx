@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useProjectStore } from "../store/project-store";
 import { supabase } from "../lib/supabase/client";
-import type { Material, MaterialCategory, RoomType } from "../types";
 import { formatKRW } from "../lib/utils";
 
 type Props = {
@@ -13,87 +12,135 @@ type Props = {
 
 type MaterialOption = {
   id: string;
-  category: MaterialCategory;
-  roomType: RoomType;
+  category: string;
   brand: string;
   productName: string;
   unit: string;
   unitPrice: number;
   shortDesc: string;
-  moodTags: string[];
   previewStyleKey: string;
 };
 
+type StepCategory =
+  | "floor"
+  | "lighting"
+  | "ceiling_fan"
+  | "air_conditioner"
+  | "wiring_accessory";
+
 const STEP_CONFIG: {
-  roomType: RoomType;
-  category: MaterialCategory;
+  key: StepCategory;
   title: string;
+  categories: string[];
 }[] = [
   {
-    roomType: "living_room",
-    category: "floor",
-    title: "거실 바닥재를 선택해주세요",
+    key: "floor",
+    title: "바닥재를 선택해주세요",
+    categories: ["flooring", "vinyl_flooring"],
   },
   {
-    roomType: "living_room",
-    category: "wall",
-    title: "거실 벽 마감을 선택해주세요",
-  },
-  {
-    roomType: "kitchen",
-    category: "kitchen_top",
-    title: "주방 상판을 선택해주세요",
-  },
-  {
-    roomType: "kitchen",
-    category: "kitchen_door",
-    title: "주방 도어를 선택해주세요",
-  },
-  {
-    roomType: "kitchen",
-    category: "kitchen_faucet",
-    title: "주방 수전을 선택해주세요",
-  },
-  {
-    roomType: "bathroom",
-    category: "bath_tile",
-    title: "욕실 타일을 선택해주세요",
-  },
-  {
-    roomType: "bathroom",
-    category: "bath_sink",
-    title: "욕실 세면대를 선택해주세요",
-  },
-  {
-    roomType: "bathroom",
-    category: "bath_shower",
-    title: "욕실 샤워수전을 선택해주세요",
-  },
-  {
-    roomType: "living_room",
-    category: "lighting",
+    key: "lighting",
     title: "조명을 선택해주세요",
+    categories: ["lighting"],
+  },
+  {
+    key: "ceiling_fan",
+    title: "실링팬을 선택해주세요",
+    categories: ["ceiling_fan"],
+  },
+  {
+    key: "air_conditioner",
+    title: "에어컨을 선택해주세요",
+    categories: ["air_conditioner"],
+  },
+  {
+    key: "wiring_accessory",
+    title: "배선가구를 선택해주세요",
+    categories: ["wiring_accessory"],
   },
 ];
 
-function resolveRoomType(category: string): RoomType {
-  if (
-    category === "kitchen_top" ||
-    category === "kitchen_door" ||
-    category === "kitchen_faucet"
-  ) {
-    return "kitchen";
+function getStepLabel(category: string) {
+  switch (category) {
+    case "flooring":
+      return "마루";
+    case "vinyl_flooring":
+      return "장판";
+    case "lighting":
+      return "조명";
+    case "ceiling_fan":
+      return "실링팬";
+    case "air_conditioner":
+      return "에어컨";
+    case "wiring_accessory":
+      return "배선가구";
+    default:
+      return category;
+  }
+}
+
+function getShortDesc(item: any) {
+  const spec = item.spec_json ?? {};
+
+  if (item.category === "flooring") {
+    return [
+      spec.product_group,
+      spec.line_name,
+      spec.model_name,
+      spec.tone,
+      spec.size_mm,
+    ]
+      .filter(Boolean)
+      .join(" / ");
   }
 
-  if (
-    category === "bath_tile" ||
-    category === "bath_sink" ||
-    category === "bath_shower"
-  ) {
-    return "bathroom";
+  if (item.category === "vinyl_flooring") {
+    return [
+      spec.product_name,
+      spec.thickness_t ? `${spec.thickness_t}T` : "",
+      spec.total_price_pyeong ? `평당 ${Number(spec.total_price_pyeong).toLocaleString()}원` : "",
+    ]
+      .filter(Boolean)
+      .join(" / ");
   }
 
-  return "living_room";
+  if (item.category === "lighting") {
+    return [
+      spec.light_type,
+      spec.model_name,
+      spec.watt ? `${spec.watt}W` : "",
+      spec.color_temp ? `${spec.color_temp}K` : "",
+    ]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
+  if (item.category === "ceiling_fan") {
+    return [
+      spec.size_inch ? `${spec.size_inch}인치` : "",
+      spec.motor_type,
+      spec.body_color,
+      spec.blade_color,
+    ]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
+  if (item.category === "air_conditioner") {
+    return [
+      spec.ac_type,
+      spec.capacity,
+      spec.indoor_units ? `실내기 ${spec.indoor_units}` : "",
+    ]
+      .filter(Boolean)
+      .join(" / ");
+  }
+
+  if (item.category === "wiring_accessory") {
+    return [spec.accessory_type, spec.line_name].filter(Boolean).join(" / ");
+  }
+
+  return item.specification || item.note || "";
 }
 
 export default function MaterialSelector({ onComplete, onBack }: Props) {
@@ -112,7 +159,16 @@ export default function MaterialSelector({ onComplete, onBack }: Props) {
         .from("material_master")
         .select("*")
         .eq("is_active", true)
-        .order("created_at", { ascending: true });
+        .in("category", [
+          "flooring",
+          "vinyl_flooring",
+          "lighting",
+          "ceiling_fan",
+          "air_conditioner",
+          "wiring_accessory",
+        ])
+        .order("category", { ascending: true })
+        .order("product_name", { ascending: true });
 
       if (error) {
         console.error(error);
@@ -121,32 +177,16 @@ export default function MaterialSelector({ onComplete, onBack }: Props) {
         return;
       }
 
-      const mapped: MaterialOption[] = ((data || []) as Material[])
-        .filter((item) =>
-          [
-            "floor",
-            "wall",
-            "kitchen_top",
-            "kitchen_door",
-            "kitchen_faucet",
-            "bath_tile",
-            "bath_sink",
-            "bath_shower",
-            "lighting",
-          ].includes(item.category)
-        )
-        .map((item) => ({
-          id: item.id,
-          category: item.category as MaterialCategory,
-          roomType: resolveRoomType(item.category),
-          brand: item.brand ?? "",
-          productName: item.product_name ?? "",
-          unit: item.unit ?? "ea",
-          unitPrice: Number(item.default_unit_price ?? 0),
-          shortDesc: item.note ?? "",
-          moodTags: [],
-          previewStyleKey: item.specification ?? "",
-        }));
+      const mapped: MaterialOption[] = (data || []).map((item: any) => ({
+        id: item.id,
+        category: item.category,
+        brand: item.brand ?? "",
+        productName: item.product_name ?? "",
+        unit: item.unit ?? "ea",
+        unitPrice: Number(item.default_unit_price ?? 0),
+        shortDesc: getShortDesc(item),
+        previewStyleKey: item.color ?? item.specification ?? "",
+      }));
 
       setMaterials(mapped);
       setLoading(false);
@@ -156,33 +196,26 @@ export default function MaterialSelector({ onComplete, onBack }: Props) {
   }, []);
 
   const options = useMemo(() => {
-    return materials.filter(
-      (item) =>
-        item.roomType === currentStep.roomType &&
-        item.category === currentStep.category
+    return materials.filter((item) =>
+      currentStep.categories.includes(item.category)
     );
   }, [materials, currentStep]);
 
   const selected = store.selections.find(
-    (s) =>
-      s.roomType === currentStep.roomType &&
-      s.category === currentStep.category
+    (s: any) => s.roomType === currentStep.key
   );
 
-  const handleSelect = (materialId: string) => {
-    const found = options.find((o) => o.id === materialId);
-    if (!found) return;
-
+  const handleSelect = (item: MaterialOption) => {
     store.setSelection({
-      roomType: found.roomType,
-      category: found.category,
-      materialId: found.id,
-      productName: found.productName,
-      brand: found.brand,
-      unit: found.unit,
-      unitPrice: found.unitPrice,
-      shortDesc: found.shortDesc,
-      previewStyleKey: found.previewStyleKey,
+      roomType: currentStep.key,
+      category: currentStep.key as any,
+      materialId: item.id,
+      productName: item.productName,
+      brand: item.brand,
+      unit: item.unit,
+      unitPrice: item.unitPrice,
+      shortDesc: item.shortDesc,
+      previewStyleKey: item.previewStyleKey,
     });
   };
 
@@ -218,15 +251,13 @@ export default function MaterialSelector({ onComplete, onBack }: Props) {
           </p>
         </div>
 
-        <span className="badge">
-          {currentStep.roomType} / {currentStep.category}
-        </span>
+        <span className="badge">{currentStep.title}</span>
       </div>
 
       <div className="card" style={{ background: "#f9fafb" }}>
         <strong>{currentStep.title}</strong>
         <p className="small-muted" style={{ marginTop: 6 }}>
-          자재는 Supabase DB에서 직접 불러옵니다.
+          등록된 자재 목록에서 선택합니다.
         </p>
       </div>
 
@@ -236,7 +267,7 @@ export default function MaterialSelector({ onComplete, onBack }: Props) {
         <div className="card">
           현재 단계에 등록된 자재가 없습니다.
           <br />
-          Supabase의 material_master 테이블 데이터를 확인해주세요.
+          {currentStep.categories.map((cat) => getStepLabel(cat)).join(", ")} 자재를 먼저 등록해주세요.
         </div>
       ) : (
         <div className="section-gap">
@@ -248,7 +279,7 @@ export default function MaterialSelector({ onComplete, onBack }: Props) {
                 key={item.id}
                 type="button"
                 className={`option-item ${isSelected ? "selected" : ""}`}
-                onClick={() => handleSelect(item.id)}
+                onClick={() => handleSelect(item)}
                 style={{
                   textAlign: "left",
                   background: "white",
@@ -263,24 +294,13 @@ export default function MaterialSelector({ onComplete, onBack }: Props) {
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 700 }}>{item.productName}</div>
-                    <div className="small-muted" style={{ marginTop: 6 }}>
-                      {item.brand} · {item.shortDesc}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 700 }}>{item.productName}</div>
+                      <span className="badge">{getStepLabel(item.category)}</span>
                     </div>
 
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 6,
-                        flexWrap: "wrap",
-                        marginTop: 8,
-                      }}
-                    >
-                      {item.moodTags.map((tag) => (
-                        <span key={tag} className="badge">
-                          {tag}
-                        </span>
-                      ))}
+                    <div className="small-muted" style={{ marginTop: 6 }}>
+                      {item.brand || "-"} · {item.shortDesc || "-"}
                     </div>
                   </div>
 

@@ -21,19 +21,35 @@ function renderSpecSummary(row: Material) {
 
   switch (row.category) {
     case "ceiling_fan":
-      return `${s.size_inch || "-"}인치 / ${s.motor_type || "-"} / 조명 ${String(s.light_included ?? "-")}`;
+      return `${s.size_inch || "-"}인치 / ${s.motor_type || "-"} / 바디 ${
+        s.body_color || "-"
+      } / 날개 ${s.blade_color || "-"} / LED ${
+        s.led_kit_available ? "가능" : "불가"
+      }`;
     case "air_conditioner":
-      return `${s.ac_type || "-"} / ${s.capacity || "-"} / 실내기 ${s.indoor_units || "-"}`;
+      return `${s.ac_type || "-"} / ${s.capacity || "-"} / 실내기 ${
+        s.indoor_units || "-"
+      }`;
     case "flooring":
-      return `${s.product_group || "-"} / ${s.line_name || "-"} / ${s.model_name || "-"} / ${s.thickness_mm || "-"}T / ${s.m2_per_box || "-"}m2`;
+      return `${s.product_group || "-"} / ${s.line_name || "-"} / ${
+        s.model_name || "-"
+      } / ${s.thickness_mm || "-"}T / ${s.m2_per_box || "-"}m2 / ${
+        s.tone || "-"
+      }`;
     case "lighting":
-      return `${s.light_type || "-"} / ${s.watt || "-"}W / ${s.color_temp || "-"}K / 타공 ${s.cutout_mm || "-"}`;
+      return `${s.light_type || "-"} / ${s.model_name || "-"} / ${
+        s.watt || "-"
+      }W / ${s.color_temp || "-"}K / 타공 ${s.cutout_mm || "-"}`;
     case "wiring_accessory":
       return `${s.accessory_type || "-"} / ${s.line_name || "-"}`;
     case "vinyl_flooring":
-      return `${s.thickness_t || "-"}T / 자재 ${s.material_price_pyeong || "-"} / 시공 ${s.labor_price_pyeong || "-"} / 평당 ${s.total_price_pyeong || "-"}`;
+      return `${s.thickness_t || "-"}T / 자재 ${s.material_price_pyeong || "-"} / 시공 ${
+        s.labor_price_pyeong || "-"
+      } / 평당 ${s.total_price_pyeong || "-"}`;
     case "wood":
-      return `${s.wood_type || "-"} / ${s.thickness_mm || "-"}T / ${s.width_mm || "-"}x${s.length_mm || "-"} / ${s.price_basis || "-"}`;
+      return `${s.wood_type || "-"} / ${s.thickness_mm || "-"}T / ${
+        s.width_mm || "-"
+      }x${s.length_mm || "-"} / ${s.price_basis || "-"}`;
     default:
       return Object.entries(s)
         .map(([k, v]) => `${k}:${String(v)}`)
@@ -50,6 +66,13 @@ const CATEGORY_OPTIONS = [
   { value: "vinyl_flooring", label: "장판" },
   { value: "wood", label: "목재" },
 ];
+
+function parseMultiValue(input?: string) {
+  return (input || "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
 
 export default function AdminMaterialsPage() {
   const [rows, setRows] = useState<Material[]>([]);
@@ -151,65 +174,208 @@ export default function AdminMaterialsPage() {
     setPreviewUrl("");
   }
 
-  function buildMaterialInput(): MaterialFormInput {
+  function handleDuplicate(row: Material) {
+    setEditing(null);
+    setCategory(row.category ?? "");
+    setBrand(row.brand ?? "");
+    setVendorName(row.vendor_name ?? "");
+    setNote(row.note ?? "");
+    setSpecJson({ ...(row.spec_json ?? {}) });
+    setPickedImage(null);
+    setPreviewUrl(getMaterialImageUrl(row.image_path));
+  }
+
+  function buildSingleMaterialInput(
+    currentCategory: string,
+    currentBrand: string,
+    currentVendorName: string,
+    currentNote: string,
+    currentSpecJson: Record<string, any>,
+    currentImagePath?: string,
+    currentThumbnailPath?: string
+  ): MaterialFormInput {
     let productName = "";
     let specification = "";
     let unit = "ea";
     let defaultUnitPrice = 0;
     let color = "";
 
-    if (category === "flooring") {
-      productName = `${specJson.line_name || ""} ${specJson.model_name || ""}`.trim();
-      specification = specJson.size_mm || "";
-      unit = "box";
-      defaultUnitPrice = Number(specJson.dealer_price_box) || 0;
-      color = specJson.tone || "";
-    } else if (category === "vinyl_flooring") {
-      productName = specJson.product_name || "";
-      specification = `${specJson.thickness_t || ""}T`;
-      unit = "평";
-      defaultUnitPrice = Number(specJson.total_price_pyeong) || 0;
-    } else if (category === "lighting") {
-      productName = specJson.product_name || "";
-      specification = `${specJson.watt || ""}W / ${specJson.color_temp || ""}K / 타공 ${specJson.cutout_mm || ""}`;
+    if (currentCategory === "ceiling_fan") {
+      productName = currentSpecJson.product_name || "";
+      specification = [
+        currentSpecJson.size_inch ? `${currentSpecJson.size_inch}인치` : "",
+        currentSpecJson.motor_type || "",
+        currentSpecJson.house_height_mm
+          ? `하우징 ${currentSpecJson.house_height_mm}mm`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" / ");
+
       unit = "ea";
-      defaultUnitPrice = Number(specJson.unit_price) || 0;
-    } else if (category === "wood") {
-      productName = specJson.product_name || specJson.wood_type || "";
-      specification = `${specJson.thickness_mm || ""}x${specJson.width_mm || ""}x${specJson.length_mm || ""}`;
-      unit = specJson.price_basis || "장";
-      defaultUnitPrice = Number(specJson.unit_price) || 0;
-    } else if (category === "ceiling_fan") {
-      productName = specJson.product_name || "";
-      specification = `${specJson.size_inch || ""}인치 / ${specJson.motor_type || ""}`;
-      unit = "ea";
-      defaultUnitPrice = Number(specJson.unit_price) || 0;
-    } else if (category === "air_conditioner") {
-      productName = specJson.product_name || "";
-      specification = `${specJson.ac_type || ""} / ${specJson.capacity || ""}`;
+      defaultUnitPrice = Number(currentSpecJson.unit_price) || 0;
+      color = currentSpecJson.body_color || "";
+    } else if (currentCategory === "air_conditioner") {
+      productName = currentSpecJson.product_name || "";
+      specification = `${currentSpecJson.ac_type || ""} / ${currentSpecJson.capacity || ""}`;
       unit = "set";
-      defaultUnitPrice = Number(specJson.unit_price) || 0;
-    } else if (category === "wiring_accessory") {
-      productName = specJson.product_name || "";
-      specification = `${specJson.accessory_type || ""} / ${specJson.line_name || ""}`;
+      defaultUnitPrice = Number(currentSpecJson.unit_price) || 0;
+    } else if (currentCategory === "flooring") {
+      productName = [
+        currentSpecJson.line_name || "",
+        currentSpecJson.model_name || "",
+        currentSpecJson.tone || "",
+      ]
+        .join(" ")
+        .trim();
+
+      specification = currentSpecJson.size_mm || "";
+      unit = "box";
+      defaultUnitPrice = Number(currentSpecJson.dealer_price_box) || 0;
+      color = currentSpecJson.tone || "";
+    } else if (currentCategory === "lighting") {
+      productName = [
+        currentSpecJson.product_name || "",
+        currentSpecJson.model_name || "",
+        currentSpecJson.color_temp ? `${currentSpecJson.color_temp}K` : "",
+      ]
+        .join(" ")
+        .trim();
+
+      specification = `${currentSpecJson.watt || ""}W / ${
+        currentSpecJson.color_temp || ""
+      }K / 타공 ${currentSpecJson.cutout_mm || ""}`;
       unit = "ea";
-      defaultUnitPrice = Number(specJson.unit_price) || 0;
+      defaultUnitPrice = Number(currentSpecJson.unit_price) || 0;
+    } else if (currentCategory === "wiring_accessory") {
+      productName = currentSpecJson.product_name || "";
+      specification = `${currentSpecJson.accessory_type || ""} / ${
+        currentSpecJson.line_name || ""
+      }`;
+      unit = "ea";
+      defaultUnitPrice = Number(currentSpecJson.unit_price) || 0;
+    } else if (currentCategory === "vinyl_flooring") {
+      productName = currentSpecJson.product_name || "";
+      specification = `${currentSpecJson.thickness_t || ""}T`;
+      unit = "평";
+      defaultUnitPrice = Number(currentSpecJson.total_price_pyeong) || 0;
+    } else if (currentCategory === "wood") {
+      productName = currentSpecJson.product_name || currentSpecJson.wood_type || "";
+      specification = `${currentSpecJson.thickness_mm || ""}x${
+        currentSpecJson.width_mm || ""
+      }x${currentSpecJson.length_mm || ""}`;
+      unit = currentSpecJson.price_basis || "장";
+      defaultUnitPrice = Number(currentSpecJson.unit_price) || 0;
     }
 
     return {
-      category,
-      brand,
-      vendor_name: vendorName,
-      note,
+      category: currentCategory,
+      brand: currentBrand,
+      vendor_name: currentVendorName,
+      note: currentNote,
       product_name: productName,
       specification,
       color,
       unit,
       default_unit_price: defaultUnitPrice,
-      spec_json: specJson,
-      image_path: editing?.image_path || undefined,
-      thumbnail_path: editing?.thumbnail_path || undefined,
+      spec_json: currentSpecJson,
+      image_path: currentImagePath,
+      thumbnail_path: currentThumbnailPath,
     };
+  }
+
+  function buildMultipleMaterialInputs(): MaterialFormInput[] {
+    if (category === "flooring") {
+      const modelNames = parseMultiValue(specJson.model_names);
+      const colorNames = parseMultiValue(specJson.color_names);
+
+      const finalModels = modelNames.length ? modelNames : [specJson.model_name || ""];
+      const finalColors = colorNames.length ? colorNames : [specJson.tone || ""];
+
+      const results: MaterialFormInput[] = [];
+
+      for (const modelName of finalModels) {
+        for (const colorName of finalColors) {
+          const {
+                model_names,
+                color_names,
+                ...restSpec
+                } = specJson;
+
+                const clonedSpec = {
+                ...restSpec,
+                model_name: modelName,
+                tone: colorName,
+                };
+
+          results.push(
+            buildSingleMaterialInput(
+              category,
+              brand,
+              vendorName,
+              note,
+              clonedSpec,
+              editing?.image_path || undefined,
+              editing?.thumbnail_path || undefined
+            )
+          );
+        }
+      }
+
+      return results;
+    }
+
+    if (category === "lighting") {
+      const modelNames = parseMultiValue(specJson.model_names);
+      const colorTemps = parseMultiValue(specJson.color_temp_list);
+
+      const finalModels = modelNames.length ? modelNames : [specJson.model_name || ""];
+      const finalTemps = colorTemps.length ? colorTemps : [String(specJson.color_temp || "")];
+
+      const results: MaterialFormInput[] = [];
+
+      for (const modelName of finalModels) {
+        for (const temp of finalTemps) {
+          const {
+            model_names,
+            color_temp_list,
+            ...restSpec
+            } = specJson;
+
+            const clonedSpec = {
+            ...restSpec,
+            model_name: modelName,
+            color_temp: Number(temp) || temp,
+            };
+
+          results.push(
+            buildSingleMaterialInput(
+              category,
+              brand,
+              vendorName,
+              note,
+              clonedSpec,
+              editing?.image_path || undefined,
+              editing?.thumbnail_path || undefined
+            )
+          );
+        }
+      }
+
+      return results;
+    }
+
+    return [
+      buildSingleMaterialInput(
+        category,
+        brand,
+        vendorName,
+        note,
+        specJson,
+        editing?.image_path || undefined,
+        editing?.thumbnail_path || undefined
+      ),
+    ];
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -220,30 +386,24 @@ export default function AdminMaterialsPage() {
       return;
     }
 
-    const input = buildMaterialInput();
-
-    if (!input.product_name.trim()) {
-      alert("카테고리 상세 입력값을 확인해주세요.");
-      return;
-    }
-
-    if (!input.unit.trim()) {
-      alert("단위가 비어 있습니다.");
-      return;
-    }
-
     try {
       setSaving(true);
 
-      let saved: Material;
+      const inputs = buildMultipleMaterialInputs().filter((item) => item.product_name.trim());
+
+      if (inputs.length === 0) {
+        alert("상세 입력값을 확인해주세요.");
+        return;
+      }
 
       if (editing) {
-        saved = await updateMaterial(editing.id, input);
+        const first = inputs[0];
+        let saved = await updateMaterial(editing.id, first);
 
         if (pickedImage) {
           const imagePath = await uploadMaterialImage(pickedImage, saved.id);
           saved = await updateMaterial(saved.id, {
-            ...input,
+            ...first,
             image_path: imagePath,
             thumbnail_path: imagePath,
           });
@@ -251,18 +411,20 @@ export default function AdminMaterialsPage() {
 
         alert("자재가 수정되었습니다.");
       } else {
-        saved = await createMaterial(input);
+        for (const input of inputs) {
+          let saved = await createMaterial(input);
 
-        if (pickedImage) {
-          const imagePath = await uploadMaterialImage(pickedImage, saved.id);
-          saved = await updateMaterial(saved.id, {
-            ...input,
-            image_path: imagePath,
-            thumbnail_path: imagePath,
-          });
+          if (pickedImage) {
+            const imagePath = await uploadMaterialImage(pickedImage, saved.id);
+            saved = await updateMaterial(saved.id, {
+              ...input,
+              image_path: imagePath,
+              thumbnail_path: imagePath,
+            });
+          }
         }
 
-        alert("자재가 등록되었습니다.");
+        alert(`${inputs.length}개의 자재가 등록되었습니다.`);
       }
 
       resetForm();
@@ -371,24 +533,106 @@ export default function AdminMaterialsPage() {
 
           {category === "ceiling_fan" && (
             <div style={styles.grid}>
-              <input style={styles.input} placeholder="제품명" value={specJson.product_name ?? ""} onChange={(e) => updateSpec("product_name", e.target.value)} />
-              <input style={styles.input} placeholder="인치" value={specJson.size_inch ?? ""} onChange={(e) => updateSpec("size_inch", Number(e.target.value) || 0)} />
-              <input style={styles.input} placeholder="모터 방식 (DC/AC)" value={specJson.motor_type ?? ""} onChange={(e) => updateSpec("motor_type", e.target.value)} />
-              <input style={styles.input} placeholder="개당 단가" value={specJson.unit_price ?? ""} onChange={(e) => updateSpec("unit_price", Number(e.target.value) || 0)} />
+              <input
+                style={styles.input}
+                placeholder="제품명"
+                value={specJson.product_name ?? ""}
+                onChange={(e) => updateSpec("product_name", e.target.value)}
+              />
+              <input
+                style={styles.input}
+                placeholder="인치"
+                value={specJson.size_inch ?? ""}
+                onChange={(e) => updateSpec("size_inch", Number(e.target.value) || 0)}
+              />
+              <input
+                style={styles.input}
+                placeholder="모터 방식 (DC/AC)"
+                value={specJson.motor_type ?? ""}
+                onChange={(e) => updateSpec("motor_type", e.target.value)}
+              />
+              <input
+                style={styles.input}
+                placeholder="기본 단가"
+                value={specJson.unit_price ?? ""}
+                onChange={(e) => updateSpec("unit_price", Number(e.target.value) || 0)}
+              />
+              <input
+                style={styles.input}
+                placeholder="기본 하우징 높이(mm)"
+                value={specJson.house_height_mm ?? ""}
+                onChange={(e) => updateSpec("house_height_mm", Number(e.target.value) || 0)}
+              />
+              <input
+                style={styles.input}
+                placeholder="기본 바디 색상"
+                value={specJson.body_color ?? ""}
+                onChange={(e) => updateSpec("body_color", e.target.value)}
+              />
+              <input
+                style={styles.input}
+                placeholder="바디 추가 색상 목록 (예: 화이트, 블랙, 브론즈)"
+                value={specJson.body_color_options ?? ""}
+                onChange={(e) => updateSpec("body_color_options", e.target.value)}
+              />
+              <input
+                style={styles.input}
+                placeholder="기본 날개 색상"
+                value={specJson.blade_color ?? ""}
+                onChange={(e) => updateSpec("blade_color", e.target.value)}
+              />
+              <input
+                style={styles.input}
+                placeholder="날개 추가 색상 목록 (예: 오크, 월넛, 화이트)"
+                value={specJson.blade_color_options ?? ""}
+                onChange={(e) => updateSpec("blade_color_options", e.target.value)}
+              />
               <select
                 style={styles.input}
-                value={String(specJson.light_included ?? "")}
+                value={String(specJson.led_kit_available ?? "")}
                 onChange={(e) =>
                   updateSpec(
-                    "light_included",
+                    "led_kit_available",
                     e.target.value === "true" ? true : e.target.value === "false" ? false : ""
                   )
                 }
               >
-                <option value="">조명 포함 여부</option>
+                <option value="">LED 키트 가능 여부</option>
+                <option value="true">가능</option>
+                <option value="false">불가</option>
+              </select>
+              <input
+                style={styles.input}
+                placeholder="LED 키트 추가금"
+                value={specJson.led_kit_price ?? ""}
+                onChange={(e) => updateSpec("led_kit_price", Number(e.target.value) || 0)}
+              />
+              <input
+                style={styles.input}
+                placeholder="하우징 높이 옵션 목록 (예: 300, 600, 900)"
+                value={specJson.house_height_options ?? ""}
+                onChange={(e) => updateSpec("house_height_options", e.target.value)}
+              />
+              <select
+                style={styles.input}
+                value={String(specJson.remote_included ?? "")}
+                onChange={(e) =>
+                  updateSpec(
+                    "remote_included",
+                    e.target.value === "true" ? true : e.target.value === "false" ? false : ""
+                  )
+                }
+              >
+                <option value="">리모컨 포함 여부</option>
                 <option value="true">포함</option>
                 <option value="false">미포함</option>
               </select>
+              <input
+                style={styles.input}
+                placeholder="추가 옵션 설명"
+                value={specJson.extra_option_note ?? ""}
+                onChange={(e) => updateSpec("extra_option_note", e.target.value)}
+              />
             </div>
           )}
 
@@ -406,7 +650,10 @@ export default function AdminMaterialsPage() {
             <div style={styles.grid}>
               <input style={styles.input} placeholder="제품군 (예: 강마루)" value={specJson.product_group ?? ""} onChange={(e) => updateSpec("product_group", e.target.value)} />
               <input style={styles.input} placeholder="라인명 (예: 마블러스)" value={specJson.line_name ?? ""} onChange={(e) => updateSpec("line_name", e.target.value)} />
-              <input style={styles.input} placeholder="모델명 (예: ZEN)" value={specJson.model_name ?? ""} onChange={(e) => updateSpec("model_name", e.target.value)} />
+              <input style={styles.input} placeholder="대표 모델명(단일 등록 시)" value={specJson.model_name ?? ""} onChange={(e) => updateSpec("model_name", e.target.value)} />
+              <input style={styles.input} placeholder="모델명 목록 (예: ZEN, MUSE, LIVE)" value={specJson.model_names ?? ""} onChange={(e) => updateSpec("model_names", e.target.value)} />
+              <input style={styles.input} placeholder="대표 색상/톤(단일 등록 시)" value={specJson.tone ?? ""} onChange={(e) => updateSpec("tone", e.target.value)} />
+              <input style={styles.input} placeholder="색상 목록 (예: 오크, 월넛, 애쉬)" value={specJson.color_names ?? ""} onChange={(e) => updateSpec("color_names", e.target.value)} />
               <input style={styles.input} placeholder="두께(mm)" value={specJson.thickness_mm ?? ""} onChange={(e) => updateSpec("thickness_mm", Number(e.target.value) || 0)} />
               <input style={styles.input} placeholder="규격(mm) 예: 597x597" value={specJson.size_mm ?? ""} onChange={(e) => updateSpec("size_mm", e.target.value)} />
               <input style={styles.input} placeholder="박스당 PCS" value={specJson.pcs_per_box ?? ""} onChange={(e) => updateSpec("pcs_per_box", Number(e.target.value) || 0)} />
@@ -414,17 +661,19 @@ export default function AdminMaterialsPage() {
               <input style={styles.input} placeholder="박스당 평" value={specJson.pyeong_per_box ?? ""} onChange={(e) => updateSpec("pyeong_per_box", Number(e.target.value) || 0)} />
               <input style={styles.input} placeholder="공급가(박스당)" value={specJson.supply_price_box ?? ""} onChange={(e) => updateSpec("supply_price_box", Number(e.target.value) || 0)} />
               <input style={styles.input} placeholder="대리점단가(박스당)" value={specJson.dealer_price_box ?? ""} onChange={(e) => updateSpec("dealer_price_box", Number(e.target.value) || 0)} />
-              <input style={styles.input} placeholder="톤/색상" value={specJson.tone ?? ""} onChange={(e) => updateSpec("tone", e.target.value)} />
               <input style={styles.input} placeholder="마감/특징" value={specJson.finish ?? ""} onChange={(e) => updateSpec("finish", e.target.value)} />
             </div>
           )}
 
           {category === "lighting" && (
             <div style={styles.grid}>
-              <input style={styles.input} placeholder="제품명" value={specJson.product_name ?? ""} onChange={(e) => updateSpec("product_name", e.target.value)} />
+              <input style={styles.input} placeholder="제품군/품명" value={specJson.product_name ?? ""} onChange={(e) => updateSpec("product_name", e.target.value)} />
               <input style={styles.input} placeholder="조명 종류" value={specJson.light_type ?? ""} onChange={(e) => updateSpec("light_type", e.target.value)} />
+              <input style={styles.input} placeholder="대표 모델명(단일 등록 시)" value={specJson.model_name ?? ""} onChange={(e) => updateSpec("model_name", e.target.value)} />
+              <input style={styles.input} placeholder="모델명 목록 (예: 1구, 2구, 3구)" value={specJson.model_names ?? ""} onChange={(e) => updateSpec("model_names", e.target.value)} />
               <input style={styles.input} placeholder="와트(W)" value={specJson.watt ?? ""} onChange={(e) => updateSpec("watt", Number(e.target.value) || 0)} />
-              <input style={styles.input} placeholder="색온도(K)" value={specJson.color_temp ?? ""} onChange={(e) => updateSpec("color_temp", Number(e.target.value) || 0)} />
+              <input style={styles.input} placeholder="대표 색온도(K)" value={specJson.color_temp ?? ""} onChange={(e) => updateSpec("color_temp", Number(e.target.value) || 0)} />
+              <input style={styles.input} placeholder="색온도 목록 (예: 3000, 4000, 6500)" value={specJson.color_temp_list ?? ""} onChange={(e) => updateSpec("color_temp_list", e.target.value)} />
               <input style={styles.input} placeholder="타공(mm)" value={specJson.cutout_mm ?? ""} onChange={(e) => updateSpec("cutout_mm", Number(e.target.value) || 0)} />
               <input style={styles.input} placeholder="외경(mm)" value={specJson.diameter_mm ?? ""} onChange={(e) => updateSpec("diameter_mm", Number(e.target.value) || 0)} />
               <input style={styles.input} placeholder="모델코드" value={specJson.model_code ?? ""} onChange={(e) => updateSpec("model_code", e.target.value)} />
@@ -562,6 +811,9 @@ export default function AdminMaterialsPage() {
                       <div style={styles.actionRow}>
                         <button style={styles.smallBtn} onClick={() => setEditing(row)}>
                           수정
+                        </button>
+                        <button style={styles.smallBtn} onClick={() => handleDuplicate(row)}>
+                          복제
                         </button>
                         <button style={styles.smallBtn} onClick={() => handleToggle(row)}>
                           {row.is_active ? "비활성화" : "활성화"}

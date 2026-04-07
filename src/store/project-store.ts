@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { SelectedMaterial, ScopeItem, HousingType } from "@/types";
+import { SelectedMaterial, ScopeItem, HousingType } from "../types";
 
 type ProjectState = {
   address: string;
